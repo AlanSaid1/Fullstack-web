@@ -144,34 +144,26 @@ func getExchangeRate() (float64, error) {
 func createBond(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         var bond Bond
-        json.NewDecoder(r.Body).Decode(&bond)
-
-        // Assumes the user's ID is passed in the request context (e.g., via middleware)
-        userId := r.Context().Value("userId").(int)
-
-        // Obtener la tasa de cambio
-        exchangeRate, err := getExchangeRate()
+        err := json.NewDecoder(r.Body).Decode(&bond)
         if err != nil {
-            http.Error(w, "Error fetching exchange rate: "+err.Error(), http.StatusInternalServerError)
+            http.Error(w, "Invalid request payload", http.StatusBadRequest)
             return
         }
 
-        // Si la moneda no es USD, ajustar el precio
-        if bond.Currency == "MXN" {
-            bond.Price = bond.Price / exchangeRate
-            bond.Currency = "USD"
-        }
-
-        err = db.QueryRow("INSERT INTO bonds (name, number, price, currency, seller_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-            bond.Name, bond.Number, bond.Price, bond.Currency, userId).Scan(&bond.Id)
+        err = db.QueryRow(
+            "INSERT INTO bonds (name, number, price, currency, seller_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+            bond.Name, bond.Number, bond.Price, bond.Currency, bond.SellerId,
+        ).Scan(&bond.Id)
         if err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
             return
         }
 
+        w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(bond)
     }
 }
+
 
 func getAvailableBonds(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
@@ -192,9 +184,11 @@ func getAvailableBonds(db *sql.DB) http.HandlerFunc {
             bonds = append(bonds, bond)
         }
 
+        w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(bonds)
     }
 }
+
 
 func getUserBonds(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
