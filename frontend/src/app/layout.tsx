@@ -1,5 +1,6 @@
 // frontend/app/layout.tsx
-import Navbar from '@/app/components/Navbar';
+import '../styles/globals.css';
+import Navbar from '@/app/components/navbar/Navbar';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
