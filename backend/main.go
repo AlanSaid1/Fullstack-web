@@ -1,18 +1,22 @@
 package main
 
 import (
-    //"context"
+    "context"
     "database/sql"
     "encoding/json"
     "log"
     "net/http"
     "os"
     "strconv"
+    "time"
 
+    "github.com/dgrijalva/jwt-go"
     "github.com/gorilla/mux"
     _ "github.com/lib/pq"
     "golang.org/x/crypto/bcrypt"
 )
+
+var jwtKey = []byte("my_secret")
 
 type User struct {
     Id       int    `json:"id"`
@@ -29,6 +33,16 @@ type Bond struct {
     Currency string  `json:"currency"`
     SellerId int     `json:"seller_id"`
     BuyerId  *int    `json:"buyer_id"` // BuyerID can be null
+}
+
+type Credentials struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
+}
+
+type Claims struct {
+    Username string `json:"username"`
+    jwt.StandardClaims
 }
 
 // main function
@@ -77,6 +91,8 @@ func main() {
     router.HandleFunc("/api/go/bonds/{id}/buy", buyBond(db)).Methods("POST")
     router.HandleFunc("/api/go/exchange-rate", getExchangeRateHandler).Methods("GET")
 
+    router.Use(authMiddleware)
+
     enhancedRouter := enableCORS(jsonContentTypeMiddleware(router))
 
     log.Fatal(http.ListenAndServe(":8080", enhancedRouter))
@@ -102,17 +118,41 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
     })
 }
 
-// func authMiddleware(next http.Handler) http.Handler {
-//     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//         // Autenticar al usuario (por ejemplo, verificando un token JWT)
-//         // Aquí se asume que userId se extrae de un token y se valida correctamente
+func authMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path == "/api/go/login" || r.URL.Path == "/api/go/users" {
+            next.ServeHTTP(w, r)
+            return
+        }
 
-//         userId := 1 // Obtener el userId desde el token (aquí se usa un valor fijo para simplificar)
+        tokenStr := r.Header.Get("Authorization")
+        if tokenStr == "" {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
 
-//         ctx := context.WithValue(r.Context(), "userId", userId)
-//         next.ServeHTTP(w, r.WithContext(ctx))
-//     })
-// }
+        claims := &Claims{}
+
+        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+        if err != nil {
+            if err == jwt.ErrSignatureInvalid {
+                http.Error(w, "Unauthorized", http.StatusUnauthorized)
+                return
+            }
+            http.Error(w, "Bad request", http.StatusBadRequest)
+            return
+        }
+        if !token.Valid {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
+
+        ctx := context.WithValue(r.Context(), "username", claims.Username)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
 
 func getExchangeRateHandler(w http.ResponseWriter, r *http.Request) {
     rate, err := getExchangeRate()
@@ -271,25 +311,38 @@ func createUser(db *sql.DB) http.HandlerFunc {
 
 func loginUser(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        var reqUser User
-        json.NewDecoder(r.Body).Decode(&reqUser)
+        var creds Credentials
+        json.NewDecoder(r.Body).Decode(&creds)
 
         var user User
-        err := db.QueryRow("SELECT id, username, password, email FROM users WHERE username = $1", reqUser.Username).Scan(&user.Id, &user.Username, &user.Password, &user.Email)
+        err := db.QueryRow("SELECT id, username, password FROM users WHERE username = $1", creds.Username).Scan(&user.Id, &user.Username, &user.Password)
         if err != nil {
             http.Error(w, "Invalid username or password", http.StatusUnauthorized)
             return
         }
 
-        err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(reqUser.Password))
+        err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
         if err != nil {
             http.Error(w, "Invalid username or password", http.StatusUnauthorized)
             return
         }
 
-        // Generate JWT token (aquí sólo devolvemos un mensaje como placeholder)
-        token := "mock-token-for-" + user.Username
+        expirationTime := time.Now().Add(5 * time.Minute)
+        claims := &Claims{
+            Username: creds.Username,
+            StandardClaims: jwt.StandardClaims{
+                ExpiresAt: expirationTime.Unix(),
+            },
+        }
 
-        json.NewEncoder(w).Encode(map[string]string{"token": token})
+        token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+        tokenString, err := token.SignedString(jwtKey)
+        if err != nil {
+            http.Error(w, "Internal server error", http.StatusInternalServerError)
+            return
+        }
+
+        json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
     }
 }
+
