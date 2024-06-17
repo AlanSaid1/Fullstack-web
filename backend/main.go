@@ -18,6 +18,12 @@ import (
 
 var jwtKey = []byte("my_secret")
 
+//avoid collisions
+type contextKey string
+const (
+    contextKeyUsername contextKey = "username"
+)
+
 type User struct {
     Id       int    `json:"id"`
     Username string `json:"username"`
@@ -149,7 +155,7 @@ func authMiddleware(next http.Handler) http.Handler {
             return
         }
 
-        ctx := context.WithValue(r.Context(), "username", claims.Username)
+        ctx := context.WithValue(r.Context(), contextKeyUsername, claims.Username)
         next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
