@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import Navbar from '../components/navbar/Navbar';
+import Footer from '../components/footer/Footer';
 
 interface Bond {
   id: number;
@@ -42,32 +44,36 @@ const BondList: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Available Bonds</h1>
-      <table className="min-w-full bg-white border border-gray-300">
-        <thead>
-          <tr>
-            <th className="py-2 px-4 border-b">ID</th>
-            <th className="py-2 px-4 border-b">Name</th>
-            <th className="py-2 px-4 border-b">Number</th>
-            <th className="py-2 px-4 border-b">Price</th>
-            <th className="py-2 px-4 border-b">Currency</th>
-            <th className="py-2 px-4 border-b">Seller ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          {bonds.map(bond => (
-            <tr key={bond.id}>
-              <td className="py-2 px-4 border-b">{bond.id}</td>
-              <td className="py-2 px-4 border-b">{bond.name}</td>
-              <td className="py-2 px-4 border-b">{bond.number}</td>
-              <td className="py-2 px-4 border-b">{bond.price}</td>
-              <td className="py-2 px-4 border-b">{bond.currency}</td>
-              <td className="py-2 px-4 border-b">{bond.seller_id}</td>
+    <div className="flex flex-col min-h-screen">
+      <Navbar />
+      <main className="flex-grow container mx-auto p-4 mt-24">
+        <h1 className="text-2xl font-bold mb-4">Available Bonds</h1>
+        <table className="min-w-full bg-white border border-gray-300">
+          <thead>
+            <tr>
+              <th className="py-2 px-4 border-b">ID</th>
+              <th className="py-2 px-4 border-b">Name</th>
+              <th className="py-2 px-4 border-b">Number</th>
+              <th className="py-2 px-4 border-b">Price</th>
+              <th className="py-2 px-4 border-b">Currency</th>
+              <th className="py-2 px-4 border-b">Seller ID</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {bonds.map(bond => (
+              <tr key={bond.id}>
+                <td className="py-2 px-4 border-b">{bond.id}</td>
+                <td className="py-2 px-4 border-b">{bond.name}</td>
+                <td className="py-2 px-4 border-b">{bond.number}</td>
+                <td className="py-2 px-4 border-b">{bond.price}</td>
+                <td className="py-2 px-4 border-b">{bond.currency}</td>
+                <td className="py-2 px-4 border-b">{bond.seller_id}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </main>
+      <Footer />
     </div>
   );
 };
