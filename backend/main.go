@@ -1,28 +1,37 @@
 package main
 
 import (
-    "context"
-    "database/sql"
-    "encoding/json"
-    "log"
-    "net/http"
-    "os"
-    "strconv"
-    "time"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
 
-    "github.com/dgrijalva/jwt-go"
-    "github.com/gorilla/mux"
-    _ "github.com/lib/pq"
-    "golang.org/x/crypto/bcrypt"
+	"github.com/golang-jwt/jwt/v4"
+	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtKey = []byte("my_secret")
+var jwtKey = []byte("my_secret_key")
 
-//avoid collisions
 type contextKey string
 const (
     contextKeyUsername contextKey = "username"
 )
+
+type Credentials struct {
+    Username string `json:"username"`
+    Password string `json:"password"`
+}
+
+type Claims struct {
+    Username string `json:"username"`
+    jwt.RegisteredClaims
+}
 
 type User struct {
     Id       int    `json:"id"`
@@ -41,22 +50,12 @@ type Bond struct {
     BuyerId  *int    `json:"buyer_id"` // BuyerID can be null
 }
 
-type Credentials struct {
-    Username string `json:"username"`
-    Password string `json:"password"`
-}
-
-type Claims struct {
-    Username string `json:"username"`
-    jwt.StandardClaims
-}
-
 // main function
 func main() {
     // connect to database
     db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("Error opening database connection:", err)
     }
     defer db.Close()
 
@@ -80,7 +79,7 @@ func main() {
         )
     `)
     if err != nil {
-        log.Fatal(err)
+        log.Fatal("Error creating tables:", err)
     }
 
     // create router
@@ -97,10 +96,11 @@ func main() {
     router.HandleFunc("/api/go/bonds/{id}/buy", buyBond(db)).Methods("POST")
     router.HandleFunc("/api/go/exchange-rate", getExchangeRateHandler).Methods("GET")
 
-    router.Use(authMiddleware)
+    router.HandleFunc("/api/go/protected", authMiddleware(protectedEndpoint)).Methods("GET")
 
     enhancedRouter := enableCORS(jsonContentTypeMiddleware(router))
 
+    log.Println("Server started on :8080")
     log.Fatal(http.ListenAndServe(":8080", enhancedRouter))
 }
 
@@ -108,7 +108,7 @@ func enableCORS(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
         w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
         if r.Method == "OPTIONS" {
             w.WriteHeader(http.StatusOK)
             return
@@ -117,46 +117,11 @@ func enableCORS(next http.Handler) http.Handler {
     })
 }
 
+
 func jsonContentTypeMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Content-Type", "application/json")
         next.ServeHTTP(w, r)
-    })
-}
-
-func authMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        if r.URL.Path == "/api/go/login" || r.URL.Path == "/api/go/users" {
-            next.ServeHTTP(w, r)
-            return
-        }
-
-        tokenStr := r.Header.Get("Authorization")
-        if tokenStr == "" {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
-
-        claims := &Claims{}
-
-        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-            return jwtKey, nil
-        })
-        if err != nil {
-            if err == jwt.ErrSignatureInvalid {
-                http.Error(w, "Unauthorized", http.StatusUnauthorized)
-                return
-            }
-            http.Error(w, "Bad request", http.StatusBadRequest)
-            return
-        }
-        if !token.Valid {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
-
-        ctx := context.WithValue(r.Context(), contextKeyUsername, claims.Username)
-        next.ServeHTTP(w, r.WithContext(ctx))
     })
 }
 
@@ -185,6 +150,74 @@ func getExchangeRate() (float64, error) {
     }
 
     return rate, nil
+}
+
+func loginUser(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var creds Credentials
+		json.NewDecoder(r.Body).Decode(&creds)
+
+		var storedCreds Credentials
+		err := db.QueryRow("SELECT username, password FROM users WHERE username = $1", creds.Username).Scan(&storedCreds.Username, &storedCreds.Password)
+		if err != nil {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+
+		err = bcrypt.CompareHashAndPassword([]byte(storedCreds.Password), []byte(creds.Password))
+		if err != nil {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+
+		expirationTime := time.Now().Add(5 * time.Minute)
+		claims := &Claims{
+			Username: creds.Username,
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(expirationTime),
+			},
+		}
+
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, err := token.SignedString(jwtKey)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
+	}
+}
+
+func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tokenStr := r.Header.Get("Authorization")
+		if tokenStr == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Remove "Bearer " prefix
+		tokenStr = tokenStr[len("Bearer "):]
+
+		claims := &Claims{}
+		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtKey, nil
+		})
+
+		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), contextKeyUsername, claims.Username)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+
+func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("This is a protected endpoint"))
 }
 
 func createBond(db *sql.DB) http.HandlerFunc {
@@ -314,41 +347,3 @@ func createUser(db *sql.DB) http.HandlerFunc {
         json.NewEncoder(w).Encode(user)
     }
 }
-
-func loginUser(db *sql.DB) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        var creds Credentials
-        json.NewDecoder(r.Body).Decode(&creds)
-
-        var user User
-        err := db.QueryRow("SELECT id, username, password FROM users WHERE username = $1", creds.Username).Scan(&user.Id, &user.Username, &user.Password)
-        if err != nil {
-            http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-            return
-        }
-
-        err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
-        if err != nil {
-            http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-            return
-        }
-
-        expirationTime := time.Now().Add(5 * time.Minute)
-        claims := &Claims{
-            Username: creds.Username,
-            StandardClaims: jwt.StandardClaims{
-                ExpiresAt: expirationTime.Unix(),
-            },
-        }
-
-        token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-        tokenString, err := token.SignedString(jwtKey)
-        if err != nil {
-            http.Error(w, "Internal server error", http.StatusInternalServerError)
-            return
-        }
-
-        json.NewEncoder(w).Encode(map[string]string{"token": tokenString})
-    }
-}
-
