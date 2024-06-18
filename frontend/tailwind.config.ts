@@ -5,7 +5,11 @@ const config: Config = {
     "./src/app/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        customCyan: '#00BFA6',
+      },
+    },
   },
   plugins: [],
 };

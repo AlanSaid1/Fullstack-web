@@ -170,7 +170,7 @@ func loginUser(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		expirationTime := time.Now().Add(5 * time.Minute)
+		expirationTime := time.Now().Add(10 * time.Minute)
 		claims := &Claims{
 			Username: creds.Username,
 			RegisteredClaims: jwt.RegisteredClaims{

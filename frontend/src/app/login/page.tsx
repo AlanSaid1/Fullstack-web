@@ -27,7 +27,9 @@ const Login: React.FC = () => {
 
   return (
     <section className="bg-gray-900 flex items-center justify-center min-h-screen">
-      <div className="bg-white shadow-lg rounded-lg p-10 max-w-md w-full">
+      <div className="bg-white shadow-2xl rounded-lg p-10 max-w-md w-full">
+        <h1 className="text-4xl font-bold text-center text-gray-900 mb-2">Welcome to BondSwap!</h1>
+        <p className="text-center text-customCyan font-medium mb-6 ">by Cicada</p>
         <h2 className="text-2xl font-bold leading-tight tracking-tight text-gray-900 mb-6 text-center">Sign in to your account</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
