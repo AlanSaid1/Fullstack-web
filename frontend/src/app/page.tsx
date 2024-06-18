@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
+import Navbar from './components/navbar/Navbar';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -50,8 +51,11 @@ export default function Home() {
   }
 
   return (
-    <div>
-      <h1>Welcome to the Home Page</h1>
-    </div>
+    <body>
+      <Navbar />
+      <div>
+        <h1>Welcome to the Home Page</h1>
+      </div>
+    </body>
   );
 }
