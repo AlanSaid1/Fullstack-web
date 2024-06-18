@@ -19,8 +19,10 @@ import (
 var jwtKey = []byte("my_secret_key")
 
 type contextKey string
+
 const (
     contextKeyUsername contextKey = "username"
+    contextKeyUserID   contextKey = "userId"
 )
 
 type Credentials struct {
@@ -92,11 +94,11 @@ func main() {
     // bond endpoints
     router.HandleFunc("/api/go/bonds", createBond(db)).Methods("POST")
     router.HandleFunc("/api/go/bonds", getAvailableBonds(db)).Methods("GET")
-    router.HandleFunc("/api/go/bonds/user", getUserBonds(db)).Methods("GET")
-    router.HandleFunc("/api/go/bonds/{id}/buy", buyBond(db)).Methods("POST")
+    router.HandleFunc("/api/go/bonds/user", authMiddleware(db, getUserBonds(db))).Methods("GET")
+    router.HandleFunc("/api/go/bonds/{id}/buy", authMiddleware(db, buyBond(db))).Methods("POST")
     router.HandleFunc("/api/go/exchange-rate", getExchangeRateHandler).Methods("GET")
 
-    router.HandleFunc("/api/go/protected", authMiddleware(protectedEndpoint)).Methods("GET")
+    router.HandleFunc("/api/go/protected", authMiddleware(db, protectedEndpoint)).Methods("GET")
 
     enhancedRouter := enableCORS(jsonContentTypeMiddleware(router))
 
@@ -116,7 +118,6 @@ func enableCORS(next http.Handler) http.Handler {
         next.ServeHTTP(w, r)
     })
 }
-
 
 func jsonContentTypeMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -189,32 +190,38 @@ func loginUser(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		tokenStr := r.Header.Get("Authorization")
-		if tokenStr == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+func authMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        tokenStr := r.Header.Get("Authorization")
+        if tokenStr == "" {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
 
-		// Remove "Bearer " prefix
-		tokenStr = tokenStr[len("Bearer "):]
+        // Remove "Bearer " prefix
+        tokenStr = tokenStr[len("Bearer "):]
 
-		claims := &Claims{}
-		token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-			return jwtKey, nil
-		})
+        claims := &Claims{}
+        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
 
-		if err != nil || !token.Valid {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+        if err != nil || !token.Valid {
+            http.Error(w, "Unauthorized", http.StatusUnauthorized)
+            return
+        }
 
-		ctx := context.WithValue(r.Context(), contextKeyUsername, claims.Username)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	}
+        var userId int
+        err = db.QueryRow("SELECT id FROM users WHERE username = $1", claims.Username).Scan(&userId)
+        if err != nil {
+            http.Error(w, "User not found", http.StatusUnauthorized)
+            return
+        }
+
+        ctx := context.WithValue(r.Context(), contextKeyUserID, userId)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    }
 }
-
 
 func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("This is a protected endpoint"))
@@ -243,7 +250,6 @@ func createBond(db *sql.DB) http.HandlerFunc {
     }
 }
 
-
 func getAvailableBonds(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
         rows, err := db.Query("SELECT id, name, number, price, currency, seller_id, buyer_id FROM bonds WHERE buyer_id IS NULL")
@@ -268,10 +274,13 @@ func getAvailableBonds(db *sql.DB) http.HandlerFunc {
     }
 }
 
-
 func getUserBonds(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
-        userId := r.Context().Value("userId").(int)
+        userId, ok := r.Context().Value(contextKeyUserID).(int)
+        if !ok {
+            http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+            return
+        }
 
         rows, err := db.Query("SELECT id, name, number, price, currency, seller_id, buyer_id FROM bonds WHERE seller_id = $1 OR buyer_id = $1", userId)
         if err != nil {
@@ -290,6 +299,7 @@ func getUserBonds(db *sql.DB) http.HandlerFunc {
             bonds = append(bonds, bond)
         }
 
+        w.Header().Set("Content-Type", "application/json")
         json.NewEncoder(w).Encode(bonds)
     }
 }
@@ -300,7 +310,7 @@ func buyBond(db *sql.DB) http.HandlerFunc {
         bondId := vars["id"]
 
         // Assumes the user's ID is passed in the request context (e.g., via middleware)
-        userId := r.Context().Value("userId").(int)
+        userId := r.Context().Value(contextKeyUserID).(int)
 
         // Check if the bond is already bought
         var buyerId sql.NullInt64

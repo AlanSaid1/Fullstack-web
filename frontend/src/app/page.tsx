@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Navbar from './components/navbar/Navbar';
 import Questions from './components/questions/questions';
-import Footer from './components/footer/footer';
+import Footer from './components/footer/Footer';
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
