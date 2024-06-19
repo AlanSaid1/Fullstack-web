@@ -93,7 +93,7 @@ func main() {
     router.HandleFunc("/api/go/login", loginUser(db)).Methods("POST")
 
     // bond endpoints
-    router.HandleFunc("/api/go/bonds", createBond(db)).Methods("POST")
+    router.HandleFunc("/api/go/bonds", authMiddleware(db, createBond(db))).Methods("POST")
     router.HandleFunc("/api/go/bonds", getAvailableBonds(db)).Methods("GET")
     router.HandleFunc("/api/go/bonds/user", authMiddleware(db, getUserBonds(db))).Methods("GET")
     router.HandleFunc("/api/go/bonds/{id}/buy", authMiddleware(db, buyBond(db))).Methods("POST")
@@ -246,12 +246,20 @@ func protectedEndpoint(w http.ResponseWriter, r *http.Request) {
 
 func createBond(db *sql.DB) http.HandlerFunc {
     return func(w http.ResponseWriter, r *http.Request) {
+        userId, ok := r.Context().Value(contextKeyUserID).(int)
+        if !ok {
+            http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+            return
+        }
+
         var bond Bond
         err := json.NewDecoder(r.Body).Decode(&bond)
         if err != nil {
             http.Error(w, "Invalid request payload", http.StatusBadRequest)
             return
         }
+
+        bond.SellerId = userId // Asigna el userId del contexto al seller_id del bono
 
         err = db.QueryRow(
             "INSERT INTO bonds (name, number, price, currency, seller_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",

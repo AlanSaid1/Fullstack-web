@@ -12,20 +12,27 @@ const BondForm: React.FC = () => {
   const [number, setNumber] = useState<number | ''>('');
   const [price, setPrice] = useState<number | ''>('');
   const [currency, setCurrency] = useState('MXN');
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8080/api/go/bonds', { name, number, price, currency}, {
+      console.log('Token:', token);
+      console.log('Form Data:', { name, number, price, currency });
+
+      await axios.post('http://localhost:8080/api/go/bonds', { name, number, price, currency }, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
-      router.push('/bond-list');
+      console.log('Bond created successfully');
+      router.push('/user-bonds'); // Redirige a la lista de bonos del usuario
     } catch (err) {
-      console.error(err);
+      console.error('Error creating bond:', err);
+      setError('Failed to create bond. Please try again.');
     }
   };
 
@@ -64,19 +71,20 @@ const BondForm: React.FC = () => {
               onChange={(e) => setPrice(parseFloat(e.target.value))}
               required
             />
-            </div>
-      <div className="mb-4">
-        <label className="block mb-2">Currency</label>
-        <select
-          className="w-full p-2 border border-gray-300 rounded"
-          value={currency}
-          onChange={(e) => setCurrency(e.target.value)}
-          required
-        >
-          <option value="MXN">MXN</option>
-          <option value="USD">USD</option>
-        </select>
           </div>
+          <div className="mb-4">
+            <label className="block mb-2">Currency</label>
+            <select
+              className="w-full p-2 border border-gray-300 rounded"
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              required
+            >
+              <option value="MXN">MXN</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+          {error && <p className="text-red-500">{error}</p>}
           <button type="submit" className="bg-blue-500 text-white p-2 rounded">Create Bond</button>
         </form>
       </main>
