@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -129,21 +130,35 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 func getExchangeRateHandler(w http.ResponseWriter, r *http.Request) {
     rate, err := getExchangeRate()
     if err != nil {
-        http.Error(w, "Error fetching exchange rate: " + err.Error(), http.StatusInternalServerError)
+        http.Error(w, "Error fetching exchange rate: "+err.Error(), http.StatusInternalServerError)
         return
     }
     json.NewEncoder(w).Encode(map[string]float64{"exchange_rate": rate})
 }
 
 func getExchangeRate() (float64, error) {
-    response, err := http.Get("https://www.banxico.org.mx/SieAPIRest/service/v1/series/SF43718/datos/oportuno")
+    client := &http.Client{}
+    req, err := http.NewRequest("GET", "https://www.banxico.org.mx/SieAPIRest/service/v1/series/SF43718/datos/oportuno", nil)
     if err != nil {
         return 0, err
     }
-    defer response.Body.Close()
+
+    req.Header.Set("Bmx-Token", "52ab1d1d09530c00ad346b1f7db551dcd61d35824888ffd29b3bc4464c4e123c")
+    resp, err := client.Do(req)
+    if err != nil {
+        return 0, err
+    }
+    defer resp.Body.Close()
+
+    if resp.StatusCode != http.StatusOK {
+        return 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+    }
 
     var result map[string]interface{}
-    json.NewDecoder(response.Body).Decode(&result)
+    err = json.NewDecoder(resp.Body).Decode(&result)
+    if err != nil {
+        return 0, err
+    }
 
     rate, err := strconv.ParseFloat(result["bmx"].(map[string]interface{})["series"].([]interface{})[0].(map[string]interface{})["datos"].([]interface{})[0].(map[string]interface{})["dato"].(string), 64)
     if err != nil {
@@ -152,6 +167,7 @@ func getExchangeRate() (float64, error) {
 
     return rate, nil
 }
+
 
 func loginUser(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

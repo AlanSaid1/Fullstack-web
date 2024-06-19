@@ -19,6 +19,8 @@ const BondList: React.FC = () => {
   const [bonds, setBonds] = useState<Bond[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<number>(1);
+  const [currency, setCurrency] = useState<string>('MXN');
 
   useEffect(() => {
     const fetchBonds = async () => {
@@ -35,6 +37,32 @@ const BondList: React.FC = () => {
     fetchBonds();
   }, []);
 
+  useEffect(() => {
+    const fetchExchangeRate = async () => {
+      try {
+        const res = await axios.get('http://localhost:8080/api/go/exchange-rate');
+        setExchangeRate(res.data.exchange_rate);
+      } catch (err) {
+        console.error('Failed to fetch exchange rate');
+      }
+    };
+
+    fetchExchangeRate();
+  }, []);
+
+  const convertPrice = (price: number, bondCurrency: string): number => {
+    if (currency === 'USD' && bondCurrency === 'MXN') {
+      return price / exchangeRate;
+    } else if (currency === 'MXN' && bondCurrency === 'USD') {
+      return price * exchangeRate;
+    }
+    return price;
+  };
+
+  const handleCurrencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCurrency(e.target.value);
+  };
+
   if (loading) {
     return <p>Loading...</p>;
   }
@@ -48,6 +76,17 @@ const BondList: React.FC = () => {
       <Navbar />
       <main className="flex-grow container mx-auto p-4 mt-24">
         <h1 className="text-2xl font-bold mb-4">Available Bonds</h1>
+        <div className="mb-4">
+          <label className="block mb-2">Display Prices In</label>
+          <select
+            className="p-2 border border-gray-300 rounded"
+            value={currency}
+            onChange={handleCurrencyChange}
+          >
+            <option value="MXN">MXN</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
         <table className="min-w-full bg-white border border-gray-300">
           <thead>
             <tr>
@@ -65,8 +104,8 @@ const BondList: React.FC = () => {
                 <td className="py-2 px-4 border-b">{bond.id}</td>
                 <td className="py-2 px-4 border-b">{bond.name}</td>
                 <td className="py-2 px-4 border-b">{bond.number}</td>
-                <td className="py-2 px-4 border-b">{bond.price}</td>
-                <td className="py-2 px-4 border-b">{bond.currency}</td>
+                <td className="py-2 px-4 border-b">{convertPrice(bond.price, bond.currency).toFixed(2)}</td>
+                <td className="py-2 px-4 border-b">{currency}</td>
                 <td className="py-2 px-4 border-b">{bond.seller_id}</td>
               </tr>
             ))}

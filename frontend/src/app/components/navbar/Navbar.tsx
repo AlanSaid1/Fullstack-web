@@ -69,14 +69,6 @@ const Navbar: React.FC = () => {
                 Profile
               </Link>
             </li>
-            <li>
-              <Link
-                href="/services"
-                className="block py-2 pl-3 pr-4 text-gray-200 hover:bg-blue-700 rounded md:hover:bg-transparent md:hover:text-white md:p-0"
-              >
-                Currency
-              </Link>
-            </li>
           </ul>
         </div>
       </div>
