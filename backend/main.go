@@ -235,6 +235,7 @@ func authMiddleware(db *sql.DB, next http.HandlerFunc) http.HandlerFunc {
         }
 
         ctx := context.WithValue(r.Context(), contextKeyUserID, userId)
+        ctx = context.WithValue(ctx, contextKeyUsername, claims.Username)
         next.ServeHTTP(w, r.WithContext(ctx))
     }
 }
@@ -325,8 +326,11 @@ func buyBond(db *sql.DB) http.HandlerFunc {
         vars := mux.Vars(r)
         bondId := vars["id"]
 
-        // Assumes the user's ID is passed in the request context (e.g., via middleware)
-        userId := r.Context().Value(contextKeyUserID).(int)
+        userId, ok := r.Context().Value(contextKeyUserID).(int)
+        if !ok {
+            http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+            return
+        }
 
         // Check if the bond is already bought
         var buyerId sql.NullInt64

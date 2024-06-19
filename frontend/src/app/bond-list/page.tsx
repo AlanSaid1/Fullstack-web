@@ -63,6 +63,26 @@ const BondList: React.FC = () => {
     setCurrency(e.target.value);
   };
 
+  const handleBuy = async (bondId: number) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('No token found');
+        return;
+      }
+      console.log(`Buying bond with ID: ${bondId}, Token: ${token}`);
+      await axios.post(`http://localhost:8080/api/go/bonds/${bondId}/buy`, {}, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      setBonds(prevBonds => prevBonds.filter(bond => bond.id !== bondId));
+    } catch (err) {
+      console.error('Failed to buy bond:', err);
+      setError('Failed to buy bond');
+    }
+  };
+
   if (loading) {
     return <p>Loading...</p>;
   }
@@ -96,6 +116,7 @@ const BondList: React.FC = () => {
               <th className="py-2 px-4 border-b">Price</th>
               <th className="py-2 px-4 border-b">Currency</th>
               <th className="py-2 px-4 border-b">Seller ID</th>
+              <th className="py-2 px-4 border-b">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -107,6 +128,14 @@ const BondList: React.FC = () => {
                 <td className="py-2 px-4 border-b">{convertPrice(bond.price, bond.currency).toFixed(2)}</td>
                 <td className="py-2 px-4 border-b">{currency}</td>
                 <td className="py-2 px-4 border-b">{bond.seller_id}</td>
+                <td className="py-2 px-4 border-b">
+                  <button
+                    onClick={() => handleBuy(bond.id)}
+                    className="bg-green-500 text-white p-2 rounded"
+                  >
+                    Buy
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
