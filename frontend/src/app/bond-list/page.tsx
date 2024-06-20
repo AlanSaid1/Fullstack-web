@@ -131,7 +131,7 @@ const BondList: React.FC = () => {
                 <td className="py-2 px-4 border-b">
                   <button
                     onClick={() => handleBuy(bond.id)}
-                    className="bg-green-500 text-white p-2 rounded"
+                    className="bg-customCyan text-white p-2 rounded"
                   >
                     Buy
                   </button>

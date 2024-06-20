@@ -56,7 +56,7 @@ const Login: React.FC = () => {
           <div className="flex flex-col items-center">
             <button
               type="submit"
-              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full focus:outline-none focus:shadow-outline mb-4"
+              className="bg-customCyan text-white font-bold py-3 px-6 rounded-full focus:outline-none focus:shadow-outline mb-4"
             >
               Login
             </button>
