@@ -1,20 +1,19 @@
 # BondSwap API
 
-## Descripción
+## Description
 
-BondSwap es una aplicación para la compra y venta de bonos. Este documento proporciona instrucciones para configurar y ejecutar la aplicación localmente.
+BondSwap is an application for buying and selling bonds. This document provides instructions for configuring and running the application locally.
 
-## Requisitos
+## Requirements
 
 - Go 1.16+
 - PostgreSQL
 - Git
 - Docker y Docker Compose
-- npm instalado
 
-## Configuración
+## Configuration
 
-1. Clona el repositorio:
+1. Clone the repository:
     ```sh
     git clone https://github.com/AlanSaid1/Fullstack-web.git
     cd Fullstack-web
